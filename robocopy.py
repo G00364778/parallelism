@@ -1,20 +1,11 @@
 # https://stackoverflow.com/questions/13161659/how-can-i-call-robocopy-within-a-python-script-to-bulk-copy-multiple-folders
 
 from subprocess import call
+import subprocess
 import os
 from time import time
-
-def python_robocopy (dirpath, logname):
-    log='/log:{}'.format(logname) # create a logfile string from the name to pass into robocopy call
-    call(['robocopy', dirpath, '%tmp%', '/l', '/s', '/bytes', '/ts', '/nc', '/ndl', '/njs', '/njh', log])
-    print('pyrobo done....')
-    with open(logname) as file:
-        result=file.read()
-        result=result.replace('\n\t  \t\t','')
-    os.remove(logname)
-    return result
-
-
+#from multiprocessing import Pool as ThreadPool
+from multiprocessing.dummy import Pool as ThreadPool 
 
 def genpathlist(fromroot):
     pathlist=[]
@@ -35,16 +26,53 @@ def genpathlist(fromroot):
                     #print('Access denied...')
         return pathlist
 
+#def python_robocopy (dirpath, logname):
+def python_robocopy (dirpath):
+    filelist=[]
+    process = subprocess.Popen(['robocopy', dirpath, '%tmp%', '/l', '/s', '/bytes', '/ts', '/nc', '/ndl', '/njs', '/njh', '/min:1'], stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    out=out.replace(b'\t  \t\t', b'')
+    out=out.replace(b'\r\n', b'\n')
+    out=out.replace(b'\n\n', b'\n')
+    out=out.decode(encoding='ISO 8859-1')
+    out=out.splitlines()#.decode(encoding='ISO 8859-1')
+    for line in out:
+        if len(line)>10:
+            filelist.append(line)
+    return filelist
+
+def flattenlist(sublist):
+    flatlist=[]
+    for i in range(len(sublist)):
+        flatlist+=sublist[i]
+    return flatlist
+
 
 if __name__ == '__main__':
 
-    start=time()
+    #root=r'\\teeis1008\Santry\Operations'
     root=r'\\teeis1008\Santry'
-    #plist=genpathlist(root)
-    #print(plist)
-    #python_robocopy(r'C:\Users\121988\documents', 'localdocs_1')
-    #python_robocopy(dirlist[1], 'archive')
-    result = python_robocopy(r'\\teeis1008\Santry\samba-linux', 'test_1')
+    
+    start=time()
+    print('\n\tparallel processing commenced {} ......\n'.format(start-start))
+    dirlist=genpathlist(root)
+    poolnum=32
+    pool = ThreadPool(poolnum) # create parellel execution pools
+    dlist = pool.map(python_robocopy, dirlist) # launch the tasks
+    pool.close() 
+    pool.join()
+    pool.terminate()
     end=time()
-    #print(result)
-    print('time:' , end-start)
+    
+    print('\tpools: {} \n\tendtime: {}'.format(poolnum, end-start))
+    print('\tsublists: {}\n'.format(len(dlist)))
+    print('\tflatten the list.. ',time()-start)
+    
+    flatlist=flattenlist(dlist)
+    print('\twrite to file.. ',time()-start)
+    with open('teeis1008_20180720', 'w', encoding='ISO 8859-1')as outfile:
+        for line in flatlist:
+            outfile.write('{}\n'.format(line))
+    print('\tprocessing completed ... \n\n',time()-start)
+
+    
